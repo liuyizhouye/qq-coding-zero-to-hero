@@ -1,0 +1,10 @@
+{
+  "venvPath": "/Users/liuyizhou/.venvs",
+  "venv": "vscode-py312",
+  "pythonVersion": "3.12",
+  "include": [
+    "function_call",
+    "mcp",
+    "tests"
+  ]
+}
