@@ -3,4 +3,11 @@ set -euo pipefail
 
 python scripts/notebook_guard.py
 
-git add function_call/walkthrough.ipynb mcp/walkthrough.ipynb
+git add \
+  function_call/walkthrough.ipynb \
+  mcp/walkthrough.ipynb \
+  skills/walkthrough.ipynb \
+  decorator/walkthrough.ipynb \
+  web_data_flow/walkthrough.ipynb \
+  react_architecture/walkthrough.ipynb \
+  rag/walkthrough.ipynb

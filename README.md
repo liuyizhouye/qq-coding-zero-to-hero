@@ -1,31 +1,34 @@
 # qq-coding-zero-to-hero
 
-一个面向初学者的 Python 学习仓库，目标是把“概念”拆成可以独立运行、可观察中间过程、可测试验证的教学模块。
+一个面向初学者的模块化学习仓库：每个知识点都拆成“可读文档 + 可运行组件 + 可观察 notebook + 可测试用例”。
 
 ## 项目目标
 
-这个项目强调三件事：
-
-1. 先理解原理，再看代码。
-2. 每个知识点都可以独立运行。
-3. 每个知识点都能看到完整中间状态（trace / notebook）。
+1. 先理解原理，再看代码实现。
+2. 每个知识点都能独立运行，不依赖复杂外部环境。
+3. 每个知识点都能看到中间过程（trace / notebook）。
 
 ## 模块总览
 
-- `function_call/`：理解 function calling 的闭环（调用请求 -> 本地执行 -> 输出回填）。
-- `mcp/`：理解 MCP 审批流（approval request -> approval response -> 分支处理）。
-- `skills/`：理解 skill 的匹配和路由策略（catalog -> scoring -> selection -> plan）。
-- `nanoGPT/`：第三方引入子项目（上游仓库内容，主要用于扩展学习）。
+- `function_call/`：函数调用闭环（`function_call` -> 本地执行 -> `function_call_output`）。
+- `mcp/`：MCP 审批流（`mcp_approval_request` -> `mcp_approval_response` -> 分支处理）。
+- `skills/`：技能路由（catalog -> scoring -> selection -> plan）。
+- `decorator/`：函数装饰器、参数化装饰器、类装饰器的调用顺序与状态传递。
+- `web_data_flow/`：真实 FastAPI REST/JSON 前后端数据传输。
+- `react_architecture/`：架构差异对比（MPA / SPA(CSR) / SSR / SSG）+ Next.js 最小实战。
+- `rag/`：离线最小 RAG（报告切分 -> 检索 -> 引用式回答）。
+- `nanoGPT/`：第三方引入子项目（保持上游内容）。
 
-## 统一设计原则（背后原理）
+## 统一教学协议
 
-### 1) Offline First（离线优先）
+每个模块都尽量提供：
 
-教学模块默认使用 mock 数据，不依赖外部 API。这样可以把注意力集中在流程机制，而不是网络和鉴权问题。
+1. `README.md`：知识点与原理。
+2. `component.py`：可独立运行的组件（CLI + 可测试函数）。
+3. `walkthrough.ipynb`：中间变量与过程观察。
+4. `tests/test_*.py`：关键路径自动化验证。
 
-### 2) Trace First（可观测优先）
-
-每个 `run_demo(...)` 都返回统一结构：
+多数教学模块通过统一返回结构输出：
 
 ```python
 {
@@ -34,51 +37,7 @@
 }
 ```
 
-`trace` 是学习核心：你可以按事件顺序看到系统状态如何一步步演进。
-
-### 3) Deterministic Core（确定性核心）
-
-核心逻辑尽量确定性，便于测试和复现。即使带随机标识（例如 `call_id` / `approval_request_id`），关键行为和事件顺序依然稳定。
-
-### 4) Testable Units（可测试单元）
-
-每个模块都把关键逻辑写成可调用函数，而不是只写脚本入口。这样既能做 CLI 演示，也能做自动化测试。
-
-### 5) Notebook Hygiene（Notebook 可维护）
-
-仓库内设置了 pre-commit 规范化流程，自动清理 notebook 输出和执行计数，减少无意义 git diff。
-
-## 目录结构
-
-```text
-qq-coding-zero-to-hero/
-  function_call/
-    README.md
-    component.py
-    walkthrough.ipynb
-  mcp/
-    README.md
-    component.py
-    walkthrough.ipynb
-  skills/
-    README.md
-    component.py
-    walkthrough.ipynb
-  tests/
-    test_function_call_component.py
-    test_mcp_component.py
-    test_skills_component.py
-  scripts/
-    notebook_guard.py
-  .githooks/
-    pre-commit
-  README.md
-  requirements.txt
-  pyrightconfig.json
-  .env.example
-```
-
-## 快速开始
+## 安装（Python）
 
 ```bash
 cd "/Users/liuyizhou/Documents/qq-coding-zero-to-hero"
@@ -94,21 +53,24 @@ python -m ipykernel install --user --name qq-coding-zero-to-hero --display-name 
 git config core.hooksPath .githooks
 ```
 
-这一步完成后：
+这会让 notebook 默认使用统一 kernel，并在提交前自动规范化 notebook 输出。
 
-- Notebook 默认 kernel 会落到项目专用环境。
-- 提交前会自动规范化 notebook，降低提交噪音。
-
-## 模块运行方式
+## 运行 Python 模块
 
 ```bash
 python function_call/component.py
 python mcp/component.py --approve y
 python mcp/component.py --approve n
 python skills/component.py
+python decorator/component.py
+python web_data_flow/component.py --mode demo
+python web_data_flow/component.py --mode serve --host 127.0.0.1 --port 8000
+python react_architecture/component.py
+python rag/component.py
+python rag/component.py "RAG-Sequence 和 RAG-Token 有什么区别？"
 ```
 
-## Notebook 学习方式
+## 打开 Notebook
 
 ```bash
 python -m jupyter lab
@@ -119,8 +81,49 @@ python -m jupyter lab
 - `function_call/walkthrough.ipynb`
 - `mcp/walkthrough.ipynb`
 - `skills/walkthrough.ipynb`
+- `decorator/walkthrough.ipynb`
+- `web_data_flow/walkthrough.ipynb`
+- `react_architecture/walkthrough.ipynb`
+- `rag/walkthrough.ipynb`
 
-推荐方法：先读模块 README 的“原理 + 流程”，再跑 notebook 观察中间状态。
+## React 架构实战（Next.js）
+
+`react_architecture/frontend_next/` 是真实前端子工程，用于直观看到 CSR / SSR / SSG 行为差异。
+
+### Node 基线
+
+- Node 20 LTS
+- npm
+
+### 启动步骤（双终端）
+
+终端 A（Python API）：
+
+```bash
+python web_data_flow/component.py --mode serve --host 127.0.0.1 --port 8000
+```
+
+终端 B（Next.js）：
+
+```bash
+cd react_architecture/frontend_next
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+访问：
+
+- `http://localhost:3000/`
+- `http://localhost:3000/csr`
+- `http://localhost:3000/ssr`
+- `http://localhost:3000/ssg`
+
+可选：刷新 SSG 构建快照
+
+```bash
+npm run refresh:ssg
+```
 
 ## 测试
 
@@ -128,17 +131,34 @@ python -m jupyter lab
 python -m pytest -q
 ```
 
-## 如何继续扩展模块
+## Notebook 规范化
 
-新增一个知识点时，保持同样结构：
+```bash
+python scripts/notebook_guard.py
+```
 
-1. `module_name/README.md`：写清功能、原理、实现步骤。
-2. `module_name/component.py`：提供可测试函数 + CLI 入口。
-3. `module_name/walkthrough.ipynb`：展示关键中间变量。
-4. `tests/test_module_name_component.py`：覆盖主路径和错误路径。
+## 目录结构（关键部分）
+
+```text
+qq-coding-zero-to-hero/
+  function_call/
+  mcp/
+  skills/
+  decorator/
+  web_data_flow/
+  react_architecture/
+    frontend_next/
+  rag/
+  tests/
+  scripts/
+  .githooks/
+  README.md
+  requirements.txt
+  pyrightconfig.json
+```
 
 ## 备注
 
-- 自建模块默认离线 mock，不依赖 OpenAI key。
-- `.env.example` 是未来扩展真实 API 流程时的可选配置。
-- `nanoGPT/` 为外部项目内容，建议按其上游 `README.md` 学习。
+- 教学模块默认离线/本地可跑，不强依赖外网 API。
+- `.env.example` 是未来扩展真实服务时的可选配置。
+- `nanoGPT/` 按上游 README 学习。

@@ -5,6 +5,11 @@
   "include": [
     "function_call",
     "mcp",
+    "skills",
+    "decorator",
+    "web_data_flow",
+    "react_architecture",
+    "rag",
     "tests"
   ]
 }

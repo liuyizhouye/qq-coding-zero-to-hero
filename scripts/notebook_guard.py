@@ -8,6 +8,10 @@ NOTEBOOKS = [
     Path("function_call/walkthrough.ipynb"),
     Path("mcp/walkthrough.ipynb"),
     Path("skills/walkthrough.ipynb"),
+    Path("decorator/walkthrough.ipynb"),
+    Path("web_data_flow/walkthrough.ipynb"),
+    Path("react_architecture/walkthrough.ipynb"),
+    Path("rag/walkthrough.ipynb"),
 ]
 
 
