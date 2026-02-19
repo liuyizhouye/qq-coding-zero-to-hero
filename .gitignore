@@ -10,3 +10,4 @@ react_architecture/frontend_next/node_modules/
 react_architecture/frontend_next/.next/
 react_architecture/frontend_next/out/
 react_architecture/frontend_next/.env.local
+.env
