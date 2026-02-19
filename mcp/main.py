@@ -9,7 +9,12 @@ import argparse
 import json
 from typing import Any
 
-from mcp.component import DEFAULT_PROMPT, build_mcp_tool_config, mock_mcp_approval_request, run_demo
+from mcp.component import (
+    DEFAULT_PROMPT,
+    build_mcp_tool_config,
+    request_mcp_approval_request,
+    run_demo,
+)
 
 
 def build_debug_state(user_text: str = DEFAULT_PROMPT, approve: bool = True) -> dict[str, object]:
@@ -17,7 +22,7 @@ def build_debug_state(user_text: str = DEFAULT_PROMPT, approve: bool = True) -> 
     step1_approve = approve
 
     step2_tool_config = build_mcp_tool_config()
-    step3_approval_request = mock_mcp_approval_request()
+    step3_approval_request = request_mcp_approval_request(step1_user_text, step2_tool_config)
     step4_approval_request_id = str(step3_approval_request["approval_request_id"])
 
     step5_demo_result = run_demo(user_text=step1_user_text, approve=step1_approve)
@@ -52,7 +57,7 @@ def _print_demo_result(demo_result: dict[str, Any]) -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="mcp debug main：用于 F5 逐行观察审批流程")
+    parser = argparse.ArgumentParser(description="mcp debug main: F5 逐行观察在线审批流程")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="调试输入文本")
     parser.add_argument("--approve", choices=("y", "n"), default="y", help="审批决策")
     parser.add_argument("--print-trace", choices=("y", "n"), default="y", help="是否打印 trace")

@@ -1,43 +1,43 @@
 # qq-coding-zero-to-hero
 
-一个面向初学者的模块化学习仓库：每个知识点都拆成“可读文档 + 可运行组件 + 可观察 notebook + 可测试用例”。
-
-## 项目目标
-
-1. 先理解原理，再看代码实现。
-2. 每个知识点都能独立运行，不依赖复杂外部环境。
-3. 每个知识点都能看到中间过程（trace / notebook）。
+一个面向初学者的模块化学习仓库：每个知识点拆成“文档 + 组件 + notebook + 测试”。
 
 ## 模块总览
 
-- `function_call/`：函数调用闭环（`function_call` -> 本地执行 -> `function_call_output`）。
-- `mcp/`：MCP 审批流（`mcp_approval_request` -> `mcp_approval_response` -> 分支处理）。
-- `skills/`：技能路由（catalog -> scoring -> selection -> plan）。
-- `decorator/`：函数装饰器、参数化装饰器、类装饰器的调用顺序与状态传递。
-- `web_data_flow/`：真实 FastAPI REST/JSON 前后端数据传输。
-- `react_architecture/`：架构差异对比（MPA / SPA(CSR) / SSR / SSG）+ Next.js 最小实战。
-- `rag/`：离线最小 RAG（报告切分 -> 检索 -> 引用式回答）。
-- `nanoGPT/`：第三方引入子项目（保持上游内容）。
+- `function_call/`: 在线 function calling 闭环（模型函数调用 -> 本地函数 -> 回填 -> 最终回答）。
+- `mcp/`: 在线 MCP 审批流（`mcp_approval_request` / `mcp_approval_response` / 分支处理）。
+- `skills/`: 在线 skill 路由（catalog -> LLM 路由 JSON -> 计划）。
+- `rag/`: 本地检索 + 在线生成（报告切分/Top-k 检索 + LLM 引用式回答）。
+- `decorator/`: Python 装饰器机制教学。
+- `web_data_flow/`: FastAPI REST/JSON 前后端数据传输。
+- `react_architecture/`: MPA / SPA(CSR) / SSR / SSG 架构对比 + Next.js 最小实战。
+- `nanoGPT/`: 第三方引入子项目（保持上游内容）。
 
-## 统一教学协议
+## 在线模式要求（LLM 模块）
 
-每个模块都尽量提供：
+以下模块只支持在线 API，不再提供离线仿真：
 
-1. `README.md`：知识点与原理。
-2. `component.py`：可独立运行的组件（CLI + 可测试函数）。
-3. `walkthrough.ipynb`：中间变量与过程观察。
-4. `tests/test_*.py`：关键路径自动化验证。
+- `function_call`
+- `mcp`
+- `skills`
+- `rag`
 
-多数教学模块通过统一返回结构输出：
+必需环境变量：
 
-```python
-{
-  "final_answer": str,
-  "trace": list[dict[str, object]]
-}
+```env
+DEEPSEEK_API_KEY=your_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+RUN_LLM_API_TESTS=0
 ```
 
-## 安装（Python）
+说明：
+
+- 缺少 `DEEPSEEK_API_KEY` 时会直接报错。
+- 网络异常、401/429、模型返回非 JSON 都会直接失败（教学上可见）。
+- 不要把真实 key 提交到仓库。
+
+## 安装
 
 ```bash
 cd "/Users/liuyizhou/Documents/qq-coding-zero-to-hero"
@@ -53,133 +53,59 @@ python -m ipykernel install --user --name qq-coding-zero-to-hero --display-name 
 git config core.hooksPath .githooks
 ```
 
-这会让 notebook 默认使用统一 kernel，并在提交前自动规范化 notebook 输出。
-
-## 运行 Python 模块
+## 运行模块
 
 ```bash
 python function_call/component.py
 python mcp/component.py --approve y
 python mcp/component.py --approve n
 python skills/component.py
+python rag/component.py
+python rag/component.py --top-k 5 "RAG-Sequence 和 RAG-Token 有什么区别？"
+
 python decorator/component.py
 python web_data_flow/component.py --mode demo
 python web_data_flow/component.py --mode serve --host 127.0.0.1 --port 8000
 python react_architecture/component.py
-python rag/component.py
-python rag/component.py "RAG-Sequence 和 RAG-Token 有什么区别？"
 ```
 
-## 打开 Notebook
+## Notebook
 
 ```bash
 python -m jupyter lab
 ```
 
-按模块打开：
-
 - `function_call/walkthrough.ipynb`
 - `mcp/walkthrough.ipynb`
 - `skills/walkthrough.ipynb`
+- `rag/walkthrough.ipynb`
 - `decorator/walkthrough.ipynb`
 - `web_data_flow/walkthrough.ipynb`
 - `react_architecture/walkthrough.ipynb`
-- `rag/walkthrough.ipynb`
-
-## React 架构实战（Next.js）
-
-`react_architecture/frontend_next/` 是真实前端子工程，用于直观看到 CSR / SSR / SSG 行为差异。
-
-### Node 基线
-
-- Node 20 LTS
-- npm
-
-### 启动步骤（双终端）
-
-终端 A（Python API）：
-
-```bash
-python web_data_flow/component.py --mode serve --host 127.0.0.1 --port 8000
-```
-
-终端 B（Next.js）：
-
-```bash
-cd react_architecture/frontend_next
-cp .env.local.example .env.local
-npm install
-npm run dev
-```
-
-访问：
-
-- `http://localhost:3000/`
-- `http://localhost:3000/csr`
-- `http://localhost:3000/ssr`
-- `http://localhost:3000/ssg`
-
-可选：刷新 SSG 构建快照
-
-```bash
-npm run refresh:ssg
-```
 
 ## 测试
+
+默认执行本地测试（在线测试自动跳过）：
 
 ```bash
 python -m pytest -q
 ```
+
+执行在线测试：
+
+```bash
+export RUN_LLM_API_TESTS=1
+python -m pytest -q
+```
+
+## VS Code F5 Debug
+
+- 调试入口在各模块 `main.py`。
+- 配置文件：`.vscode/launch.json`、`.vscode/settings.json`。
+- 推荐从 `build_debug_state(...)` 的 `step*` 变量开始逐行观察。
 
 ## Notebook 规范化
 
 ```bash
 python scripts/notebook_guard.py
 ```
-
-## VS Code F5 Debug
-
-1. 安装并启用 VS Code Python 扩展（ms-python.python）。
-2. 打开 Run and Debug 面板，选择对应配置后按 F5。
-3. 推荐先从 `Debug function_call (step)`、`Debug mcp (approve=n)`、`Debug rag (custom query)` 开始。
-
-调试配置文件：
-
-- `.vscode/launch.json`：模块级 F5 入口（含关键分支参数）。
-- `.vscode/settings.json`：固定解释器为 `/Users/liuyizhou/.venvs/vscode-py312/bin/python`。
-
-推荐断点位置：
-
-- 每个模块 `main.py` 的 `build_debug_state(...)` 内 `step1_* / step2_* / step3_*` 赋值行。
-
-查看变量方式：
-
-- Variables 面板看局部变量。
-- Watch 添加 `debug_state`、`demo_result`、`trace`。
-- Debug Console 查看表达式与对象结构。
-
-## 目录结构（关键部分）
-
-```text
-qq-coding-zero-to-hero/
-  function_call/
-  mcp/
-  skills/
-  decorator/
-  web_data_flow/
-  react_architecture/
-    frontend_next/
-  rag/
-  tests/
-  scripts/
-  .githooks/
-  README.md
-  requirements.txt
-  pyrightconfig.json
-```
-
-## 备注
-
-- 教学模块默认离线/本地可跑，不强依赖外网 API。
-- `.env.example` 是未来扩展真实服务时的可选配置。
-- `nanoGPT/` 按上游 README 学习。

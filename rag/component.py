@@ -1,10 +1,12 @@
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 from typing import TypedDict
 
 import numpy as np
+from openai import OpenAI
 
 TraceEvent = dict[str, object]
 DEFAULT_QUERY = "RAG-Sequence 和 RAG-Token 有什么区别？"
@@ -23,8 +25,43 @@ class DemoResult(TypedDict):
     trace: list[TraceEvent]
 
 
+def _get_client() -> OpenAI:
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("missing DEEPSEEK_API_KEY; online mode requires a valid API key")
+    return OpenAI(api_key=api_key, base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
+
+
+def _get_model() -> str:
+    return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+
+def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
+    client = _get_client()
+    response = client.chat.completions.create(
+        model=_get_model(),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        stream=False,
+    )
+
+    message = response.choices[0].message.content
+    if not isinstance(message, str):
+        raise ValueError("model did not return text content")
+
+    try:
+        payload = json.loads(message)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"model output is not strict JSON: {message}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("model JSON output must be an object")
+    return payload
+
+
 def load_report_text(path: str = DEFAULT_REPORT_PATH) -> str:
-    """读取研究报告原文，作为 RAG 知识库输入。"""
     report_path = Path(path)
     if not report_path.exists():
         raise FileNotFoundError(f"report file not found: {path}")
@@ -35,7 +72,6 @@ def load_report_text(path: str = DEFAULT_REPORT_PATH) -> str:
 
 
 def chunk_report(text: str, chunk_size: int = 420, overlap: int = 80) -> list[str]:
-    """按段落聚合并加入固定重叠，生成可检索 chunk。"""
     if not text.strip():
         raise ValueError("text is empty")
     if chunk_size <= 0:
@@ -99,7 +135,6 @@ def _build_tf_matrix(tokenized_texts: list[list[str]], vocabulary: list[str]) ->
 
 
 def retrieve_top_k(chunks: list[str], query: str, top_k: int = 3) -> list[RetrievedChunk]:
-    """用 token 频次 + 余弦相似度检索最相关的 chunk。"""
     if not chunks:
         raise ValueError("chunks must not be empty")
     query_text = query.strip()
@@ -145,37 +180,49 @@ def retrieve_top_k(chunks: list[str], query: str, top_k: int = 3) -> list[Retrie
     return hits
 
 
-def _compact_text(text: str, max_chars: int = 88) -> str:
-    one_line = " ".join(text.split())
-    if len(one_line) <= max_chars:
-        return one_line
-    return f"{one_line[:max_chars].rstrip()}..."
-
-
-def synthesize_answer(query: str, hits: list[RetrievedChunk]) -> str:
-    """将检索命中片段拼装为带引用的模板化回答。"""
-    query_text = query.strip()
-    if not query_text:
-        raise ValueError("query must not be empty")
+def request_answer_payload(query: str, hits: list[RetrievedChunk]) -> dict[str, object]:
     if not hits:
         raise ValueError("hits must not be empty")
 
-    first_hit = hits[0]
-    conclusion = _compact_text(first_hit["text"], max_chars=70)
-
-    evidence_lines = [
-        f"- [{hit['chunk_id']}] score={hit['score']:.4f} | {_compact_text(hit['text'])}" for hit in hits
-    ]
-
-    return (
-        f"针对问题“{query_text}”，我基于检索到的报告片段给出结论：{conclusion}\n"
-        "下面是可追溯证据（按相关性排序）：\n"
-        f"{'\n'.join(evidence_lines)}"
+    system_prompt = "You are a RAG answer synthesizer. Return strict JSON only, no markdown."
+    user_prompt = (
+        "请基于给定检索片段回答问题，并给出引用 chunk_id。\n"
+        "JSON schema:\n"
+        "{\n"
+        '  "final_answer": "string",\n'
+        '  "citations": ["chunk_001", "chunk_002"]\n'
+        "}\n"
+        "要求: 只引用给定 hits 中存在的 chunk_id。\n"
+        f"query: {query}\n"
+        f"hits: {json.dumps(hits, ensure_ascii=False)}"
     )
+
+    payload = _request_json(system_prompt, user_prompt)
+    final_answer = payload.get("final_answer")
+    citations_obj = payload.get("citations")
+
+    if not isinstance(final_answer, str) or not final_answer.strip():
+        raise ValueError("model returned invalid final_answer")
+    if not isinstance(citations_obj, list) or not citations_obj:
+        raise ValueError("model returned invalid citations")
+
+    citations = [str(item) for item in citations_obj]
+    valid_ids = {hit["chunk_id"] for hit in hits}
+    if any(citation not in valid_ids for citation in citations):
+        raise ValueError("model returned citation outside retrieved hits")
+
+    return {
+        "final_answer": final_answer.strip(),
+        "citations": citations,
+    }
+
+
+def synthesize_answer(query: str, hits: list[RetrievedChunk]) -> str:
+    payload = request_answer_payload(query, hits)
+    return str(payload["final_answer"])
 
 
 def run_demo(query: str | None = None, top_k: int = 3) -> DemoResult:
-    """执行离线最小 RAG 流程并返回统一 trace。"""
     trace: list[TraceEvent] = []
 
     report_text = load_report_text()
@@ -217,20 +264,21 @@ def run_demo(query: str | None = None, top_k: int = 3) -> DemoResult:
         }
     )
 
-    answer = synthesize_answer(prepared_query, hits)
+    answer_payload = request_answer_payload(prepared_query, hits)
     trace.append(
         {
             "event": "answer_synthesized",
-            "citations": [hit["chunk_id"] for hit in hits],
+            "citations": answer_payload["citations"],
         }
     )
 
-    trace.append({"event": "model_final_answer", "content": answer})
-    return {"final_answer": answer, "trace": trace}
+    final_answer = str(answer_payload["final_answer"])
+    trace.append({"event": "model_final_answer", "content": final_answer})
+    return {"final_answer": final_answer, "trace": trace}
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="离线最小 RAG 演示：加载报告 -> 切分 -> 检索 -> 引用式回答")
+    parser = argparse.ArgumentParser(description="在线 RAG 演示：加载报告 -> 切分 -> 检索 -> API 引用式回答")
     parser.add_argument("--top-k", type=int, default=3, help="返回的检索片段数")
     parser.add_argument("prompt", nargs="*", help="可选：自定义 query")
     return parser.parse_args()

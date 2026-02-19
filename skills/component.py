@@ -1,6 +1,9 @@
 import argparse
 import json
+import os
 from typing import TypedDict
+
+from openai import OpenAI
 
 DEFAULT_PROMPT = "请帮我创建一个新技能，用于规范化代码评审流程。"
 TraceEvent = dict[str, object]
@@ -12,18 +15,45 @@ class SkillDefinition(TypedDict):
     triggers: list[str]
 
 
-class SkillSelection(TypedDict):
-    name: str
-    description: str
-    triggers: list[str]
-    score: int
-    trigger_hits: list[str]
-    name_hit: bool
-
-
 class DemoResult(TypedDict):
     final_answer: str
     trace: list[TraceEvent]
+
+
+def _get_client() -> OpenAI:
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("missing DEEPSEEK_API_KEY; online mode requires a valid API key")
+    return OpenAI(api_key=api_key, base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
+
+
+def _get_model() -> str:
+    return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+
+def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
+    client = _get_client()
+    response = client.chat.completions.create(
+        model=_get_model(),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        stream=False,
+    )
+
+    message = response.choices[0].message.content
+    if not isinstance(message, str):
+        raise ValueError("model did not return text content")
+
+    try:
+        payload = json.loads(message)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"model output is not strict JSON: {message}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("model JSON output must be an object")
+    return payload
 
 
 def load_skill_catalog() -> list[SkillDefinition]:
@@ -41,66 +71,54 @@ def load_skill_catalog() -> list[SkillDefinition]:
     ]
 
 
-def match_skill_scores(user_text: str, catalog: list[SkillDefinition] | None = None) -> list[dict[str, object]]:
-    if catalog is None:
-        catalog = load_skill_catalog()
-    text = user_text.lower()
-    scored: list[dict[str, object]] = []
-    for skill in catalog:
-        trigger_hits = [token for token in skill["triggers"] if token.lower() in text]
-        name_hit = skill["name"].lower() in text
-        score = len(trigger_hits) + (2 if name_hit else 0)
-        scored.append(
-            {
-                "name": skill["name"],
-                "score": score,
-                "trigger_hits": trigger_hits,
-                "name_hit": name_hit,
-            }
-        )
-    return sorted(scored, key=lambda item: (-int(item["score"]), str(item["name"])))
+def request_skill_routing(user_text: str, catalog: list[SkillDefinition]) -> dict[str, object]:
+    system_prompt = "You are a skill router. Return strict JSON only, no markdown."
+    user_prompt = (
+        "请根据用户输入从 catalog 中选择最匹配技能。\n"
+        "JSON schema:\n"
+        "{\n"
+        '  "matched": true,\n'
+        '  "selected_name": "skill-creator",\n'
+        '  "score": 3,\n'
+        '  "trigger_hits": ["创建", "skill"],\n'
+        '  "execution_plan": ["步骤1", "步骤2"],\n'
+        '  "explanation": "string"\n'
+        "}\n"
+        "如果无匹配: matched=false, selected_name=null, execution_plan=[]。\n"
+        f"catalog: {json.dumps(catalog, ensure_ascii=False)}\n"
+        f"user_text: {user_text}"
+    )
 
+    payload = _request_json(system_prompt, user_prompt)
 
-def select_skill(user_text: str, catalog: list[SkillDefinition] | None = None) -> SkillSelection | None:
-    if catalog is None:
-        catalog = load_skill_catalog()
-    ranked = match_skill_scores(user_text, catalog)
-    if not ranked:
-        return None
-    top = ranked[0]
-    if int(top["score"]) <= 0:
-        return None
-    matched = next(item for item in catalog if item["name"] == top["name"])
+    matched = bool(payload.get("matched", False))
+    selected_name_obj = payload.get("selected_name")
+    selected_name = str(selected_name_obj).strip() if isinstance(selected_name_obj, str) else None
+
+    if matched:
+        if not selected_name:
+            raise ValueError("model returned matched=true but selected_name is empty")
+        valid_names = {item["name"] for item in catalog}
+        if selected_name not in valid_names:
+            raise ValueError("model selected unknown skill")
+
+    score = int(payload.get("score", 0))
+    trigger_hits_obj = payload.get("trigger_hits", [])
+    execution_plan_obj = payload.get("execution_plan", [])
+    explanation_obj = payload.get("explanation", "")
+
+    trigger_hits = [str(item) for item in trigger_hits_obj] if isinstance(trigger_hits_obj, list) else []
+    execution_plan = [str(item) for item in execution_plan_obj] if isinstance(execution_plan_obj, list) else []
+    explanation = str(explanation_obj).strip()
+
     return {
-        "name": matched["name"],
-        "description": matched["description"],
-        "triggers": matched["triggers"],
-        "score": int(top["score"]),
-        "trigger_hits": list(top["trigger_hits"]),
-        "name_hit": bool(top["name_hit"]),
+        "matched": matched,
+        "selected_name": selected_name,
+        "score": score,
+        "trigger_hits": trigger_hits,
+        "execution_plan": execution_plan,
+        "explanation": explanation,
     }
-
-
-def build_execution_plan(selection: SkillSelection) -> list[str]:
-    if selection["name"] == "skill-creator":
-        return [
-            "确认 skill 的目标任务与触发语句。",
-            "规划可复用资源（scripts/references/assets）。",
-            "编写或更新 SKILL.md（包含 name/description）。",
-            "运行 quick_validate.py 做结构校验。",
-        ]
-    if selection["name"] == "skill-installer":
-        return [
-            "确认来源（curated 列表或 GitHub 仓库路径）。",
-            "安装到 $CODEX_HOME/skills 并检查目录结构。",
-            "校验 SKILL.md 的触发描述是否准确。",
-            "执行一次最小触发用例验证安装结果。",
-        ]
-    return [
-        "明确用户目标。",
-        "选择可复用流程。",
-        "执行并验证结果。",
-    ]
 
 
 def run_demo(user_text: str) -> DemoResult:
@@ -114,35 +132,60 @@ def run_demo(user_text: str) -> DemoResult:
         }
     )
 
-    scores = match_skill_scores(user_text, catalog)
-    trace.append({"event": "skill_match_scores", "user_text": user_text, "scores": scores})
+    routing = request_skill_routing(user_text, catalog)
 
-    selection = select_skill(user_text, catalog)
-    if selection is None:
-        final_answer = "未匹配到专用 skill。请补充你是要“创建/更新 skill”还是“安装 skill”。"
-        trace.append({"event": "model_final_answer", "content": final_answer})
-        return {"final_answer": final_answer, "trace": trace}
+    scores_payload: list[dict[str, object]]
+    if routing["matched"] and isinstance(routing["selected_name"], str):
+        scores_payload = [
+            {
+                "name": routing["selected_name"],
+                "score": int(routing["score"]),
+                "trigger_hits": list(routing["trigger_hits"]),
+                "name_hit": True,
+            }
+        ]
+    else:
+        scores_payload = []
 
     trace.append(
         {
-            "event": "skill_selected",
-            "name": selection["name"],
-            "score": selection["score"],
-            "trigger_hits": selection["trigger_hits"],
+            "event": "skill_match_scores",
+            "user_text": user_text,
+            "scores": scores_payload,
+            "routing": routing,
         }
     )
 
-    plan = build_execution_plan(selection)
-    trace.append({"event": "skill_execution_plan", "name": selection["name"], "plan": plan})
+    if not routing["matched"] or not isinstance(routing["selected_name"], str):
+        final_answer = routing["explanation"] or "未匹配到专用 skill。请补充更具体的技能意图。"
+        trace.append({"event": "model_final_answer", "content": final_answer})
+        return {"final_answer": final_answer, "trace": trace}
 
-    numbered_plan = " ".join(f"{idx}. {step}" for idx, step in enumerate(plan, start=1))
-    final_answer = f"已匹配到 {selection['name']}。建议执行：{numbered_plan}"
+    selected_name = routing["selected_name"]
+    trace.append(
+        {
+            "event": "skill_selected",
+            "name": selected_name,
+            "score": int(routing["score"]),
+            "trigger_hits": list(routing["trigger_hits"]),
+        }
+    )
+
+    execution_plan = list(routing["execution_plan"])
+    trace.append({"event": "skill_execution_plan", "name": selected_name, "plan": execution_plan})
+
+    if execution_plan:
+        numbered_plan = " ".join(f"{idx}. {step}" for idx, step in enumerate(execution_plan, start=1))
+        final_answer = f"已匹配到 {selected_name}。{routing['explanation']} 建议执行：{numbered_plan}"
+    else:
+        final_answer = f"已匹配到 {selected_name}。{routing['explanation']}"
+
     trace.append({"event": "model_final_answer", "content": final_answer})
     return {"final_answer": final_answer, "trace": trace}
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="离线演示 skills 模块：发现技能 -> 匹配 -> 规划")
+    parser = argparse.ArgumentParser(description="在线演示 skills 模块：发现技能 -> 匹配 -> 规划")
     parser.add_argument("prompt", nargs="*", help="可选：覆盖默认用户输入")
     return parser.parse_args()
 

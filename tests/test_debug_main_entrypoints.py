@@ -1,6 +1,8 @@
 import importlib
 
-MODULES = [
+import pytest
+
+ALL_MODULES = [
     "function_call.main",
     "mcp.main",
     "skills.main",
@@ -10,16 +12,29 @@ MODULES = [
     "rag.main",
 ]
 
+ONLINE_MODULES = [
+    "function_call.main",
+    "mcp.main",
+    "skills.main",
+    "rag.main",
+]
+
+OFFLINE_MODULES = [
+    "decorator.main",
+    "web_data_flow.main",
+    "react_architecture.main",
+]
+
 
 def test_main_modules_are_importable_and_have_debug_interfaces() -> None:
-    for module_name in MODULES:
+    for module_name in ALL_MODULES:
         module = importlib.import_module(module_name)
         assert hasattr(module, "build_debug_state")
         assert hasattr(module, "run_debug")
 
 
-def test_build_debug_state_returns_dict_with_demo_result() -> None:
-    for module_name in MODULES:
+def test_build_debug_state_returns_dict_with_demo_result_for_offline_modules() -> None:
+    for module_name in OFFLINE_MODULES:
         module = importlib.import_module(module_name)
         builder = getattr(module, "build_debug_state")
         debug_state = builder()
@@ -29,6 +44,19 @@ def test_build_debug_state_returns_dict_with_demo_result() -> None:
         assert isinstance(debug_state["demo_result"], dict)
 
 
+@pytest.mark.online
+def test_build_debug_state_returns_dict_with_demo_result_for_online_modules() -> None:
+    for module_name in ONLINE_MODULES:
+        module = importlib.import_module(module_name)
+        builder = getattr(module, "build_debug_state")
+        debug_state = builder()
+
+        assert isinstance(debug_state, dict)
+        assert "demo_result" in debug_state
+        assert isinstance(debug_state["demo_result"], dict)
+
+
+@pytest.mark.online
 def test_mcp_build_debug_state_supports_approve_branches() -> None:
     module = importlib.import_module("mcp.main")
 
@@ -39,6 +67,7 @@ def test_mcp_build_debug_state_supports_approve_branches() -> None:
     assert state_no["step1_approve"] is False
 
 
+@pytest.mark.online
 def test_rag_build_debug_state_supports_custom_query_and_top_k() -> None:
     module = importlib.import_module("rag.main")
     custom_query = "RAG 的核心组件有哪些？"

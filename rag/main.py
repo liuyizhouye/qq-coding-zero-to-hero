@@ -20,6 +20,7 @@ def build_debug_state(query: str | None = None, top_k: int = 3) -> dict[str, obj
     step3_chunks = chunk_report(step2_report_text)
     step4_hits = retrieve_top_k(step3_chunks, step1_query, top_k=step1_top_k)
     step5_answer = synthesize_answer(step1_query, step4_hits)
+
     step6_demo_result = run_demo(query=step1_query, top_k=step1_top_k)
 
     debug_state: dict[str, object] = {
@@ -53,7 +54,7 @@ def _print_demo_result(demo_result: dict[str, Any]) -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="rag debug main：用于 F5 逐行观察检索与引用式回答")
+    parser = argparse.ArgumentParser(description="rag debug main: F5 逐行观察检索与在线生成")
     parser.add_argument("--query", default=DEFAULT_QUERY, help="调试 query")
     parser.add_argument("--top-k", type=int, default=3, help="检索 top-k")
     parser.add_argument("--print-trace", choices=("y", "n"), default="y", help="是否打印 trace")

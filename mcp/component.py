@@ -4,11 +4,8 @@ import os
 from typing import TypedDict
 from uuid import uuid4
 
-# 本模块是一个“mcp 审批流教学最小闭环”：
-# 1) 生成审批请求（mcp_approval_request）
-# 2) 回填审批结果（mcp_approval_response）
-# 3) 根据批准/拒绝走不同分支
-# 4) 输出结构化 trace 供学习和审计
+from openai import OpenAI
+
 DEFAULT_PROMPT = "先通过 MCP 查一句：什么是 Model Context Protocol。"
 TraceEvent = dict[str, object]
 
@@ -18,12 +15,44 @@ class DemoResult(TypedDict):
     trace: list[TraceEvent]
 
 
-def build_mcp_tool_config(server_label: str = "demo-mcp") -> dict[str, object]:
-    """构造 MCP 工具配置。
+def _get_client() -> OpenAI:
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("missing DEEPSEEK_API_KEY; online mode requires a valid API key")
+    return OpenAI(api_key=api_key, base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
 
-    这里允许通过环境变量覆写，方便你后续从 mock 切到真实服务。
-    """
-    server_url = os.getenv("MCP_SERVER_URL", "https://mock-mcp.local/server")
+
+def _get_model() -> str:
+    return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+
+def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
+    client = _get_client()
+    response = client.chat.completions.create(
+        model=_get_model(),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        stream=False,
+    )
+
+    message = response.choices[0].message.content
+    if not isinstance(message, str):
+        raise ValueError("model did not return text content")
+
+    try:
+        payload = json.loads(message)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"model output is not strict JSON: {message}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("model JSON output must be an object")
+    return payload
+
+
+def build_mcp_tool_config(server_label: str = "demo-mcp") -> dict[str, object]:
+    server_url = os.getenv("MCP_SERVER_URL", "https://demo-mcp.local/server")
     allowed = os.getenv("MCP_ALLOWED_TOOLS", "ask_question,read_wiki_structure")
     allowed_tools = [item.strip() for item in allowed.split(",") if item.strip()]
     return {
@@ -35,66 +64,116 @@ def build_mcp_tool_config(server_label: str = "demo-mcp") -> dict[str, object]:
     }
 
 
-def mock_mcp_approval_request() -> dict[str, object]:
-    """模拟模型侧发出的审批请求。
+def request_mcp_approval_request(user_text: str, config: dict[str, object]) -> dict[str, object]:
+    system_prompt = (
+        "You generate a MCP approval request object. "
+        "Return strict JSON only, no markdown."
+    )
+    user_prompt = (
+        "请根据用户意图生成待审批工具调用。\n"
+        "JSON schema:\n"
+        "{\n"
+        '  "name": "ask_question",\n'
+        '  "arguments": {"question": "string"},\n'
+        '  "reason": "string"\n'
+        "}\n"
+        f"用户输入: {user_text}\n"
+        f"允许工具: {json.dumps(config.get('allowed_tools', []), ensure_ascii=False)}"
+    )
 
-    approval_request_id 是审批链路的关联键，响应时必须原样带回。
-    """
+    payload = _request_json(system_prompt, user_prompt)
+    name = str(payload.get("name", "")).strip()
+    arguments_obj = payload.get("arguments")
+
+    if not name:
+        raise ValueError("model returned empty tool name")
+    if not isinstance(arguments_obj, dict):
+        raise ValueError("model returned invalid arguments")
+
+    question = str(arguments_obj.get("question", "")).strip()
+    if not question:
+        raise ValueError("model returned empty arguments.question")
+
     return {
         "type": "mcp_approval_request",
         "approval_request_id": f"apr_{uuid4().hex[:10]}",
-        "server_label": "demo-mcp",
-        "name": "ask_question",
-        "arguments": {"question": "什么是 Model Context Protocol?"},
+        "server_label": str(config.get("server_label", "demo-mcp")),
+        "name": name,
+        "arguments": {"question": question},
     }
 
 
-def run_demo(user_text: str, approve: bool = True) -> DemoResult:
-    """执行 MCP 审批流程演示。
+def request_mcp_final_answer(
+    user_text: str,
+    approve: bool,
+    approval_request: dict[str, object],
+    tool_result: dict[str, object] | None,
+) -> str:
+    system_prompt = "You summarize MCP approval workflow results. Return strict JSON only."
+    user_prompt = (
+        "请根据审批流程给出中文总结。\n"
+        "JSON schema:\n"
+        "{\n"
+        '  "final_answer": "string"\n'
+        "}\n"
+        f"用户输入: {user_text}\n"
+        f"审批是否通过: {approve}\n"
+        f"审批请求: {json.dumps(approval_request, ensure_ascii=False)}\n"
+        f"工具结果: {json.dumps(tool_result, ensure_ascii=False) if tool_result is not None else 'null'}"
+    )
 
-    approve=True 走“允许执行工具”分支；
-    approve=False 走“立即终止”分支。
-    """
+    payload = _request_json(system_prompt, user_prompt)
+    final_answer = payload.get("final_answer")
+    if not isinstance(final_answer, str) or not final_answer.strip():
+        raise ValueError("model returned invalid final_answer")
+    return final_answer.strip()
+
+
+def run_demo(user_text: str, approve: bool = True) -> DemoResult:
     trace: list[TraceEvent] = []
 
-    # Step 1: 记录本轮将要使用的 MCP 工具配置（便于审计上下文）
     config = build_mcp_tool_config()
     trace.append({"event": "mcp_tool_config", "config": config})
 
-    # Step 2: 模拟模型发起审批请求
-    approval_request = mock_mcp_approval_request()
+    approval_request = request_mcp_approval_request(user_text=user_text, config=config)
     trace.append({"event": "mcp_approval_request", **approval_request})
 
-    # Step 3: 操作员对同一 approval_request_id 给出批准/拒绝
     approval_response = {
         "type": "mcp_approval_response",
         "approval_request_id": approval_request["approval_request_id"],
         "approve": approve,
-        "reason": "approved by operator (mock)" if approve else "rejected by operator (mock)",
+        "reason": "approved by operator" if approve else "rejected by operator",
     }
     trace.append({"event": "mcp_approval_response", **approval_response})
 
-    # Step 4a: 拒绝分支，流程在此停止，不再进入工具执行
     if not approve:
-        final_answer = "已拒绝 MCP 工具调用，流程终止。"
+        final_answer = request_mcp_final_answer(
+            user_text=user_text,
+            approve=False,
+            approval_request=approval_request,
+            tool_result=None,
+        )
         trace.append({"event": "model_final_answer", "content": final_answer})
         return {"final_answer": final_answer, "trace": trace}
 
-    # Step 4b: 批准分支，模拟远程工具执行结果
     tool_result = {
         "tool_name": str(approval_request["name"]),
-        "result": "Model Context Protocol (MCP) 是让模型与外部工具进行标准化通信的协议（mock）。",
+        "result": "已执行 MCP 工具调用（在线模式示例）。",
     }
     trace.append({"event": "mcp_tool_result", **tool_result})
 
-    # Step 5: 汇总流程并给出最终回答
-    final_answer = f"已批准并完成 MCP 调用。{tool_result['result']} 用户问题：{user_text}"
+    final_answer = request_mcp_final_answer(
+        user_text=user_text,
+        approve=True,
+        approval_request=approval_request,
+        tool_result=tool_result,
+    )
     trace.append({"event": "model_final_answer", "content": final_answer})
     return {"final_answer": final_answer, "trace": trace}
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="离线演示 mcp_approval_request -> mcp_approval_response 的审批流程")
+    parser = argparse.ArgumentParser(description="在线演示 mcp_approval_request -> mcp_approval_response 审批流程")
     parser.add_argument("--approve", choices=("y", "n"), default="y", help="审批决策: y=批准, n=拒绝")
     parser.add_argument("prompt", nargs="*", help="可选：覆盖默认用户输入")
     return parser.parse_args()
@@ -106,7 +185,6 @@ def _main() -> None:
     approve = args.approve == "y"
     result = run_demo(user_text=user_text, approve=approve)
 
-    # 教学场景下打印 trace，便于对照审批链路的每个事件。
     print("=== TRACE ===")
     for index, event in enumerate(result["trace"], start=1):
         print(f"[{index}]")

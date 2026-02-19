@@ -9,15 +9,22 @@ import argparse
 import json
 from typing import Any
 
-from function_call.component import DEFAULT_PROMPT, calc_portfolio_value, mock_model_function_call, run_demo
+from function_call.component import (
+    DEFAULT_PROMPT,
+    calc_portfolio_value,
+    request_model_function_call,
+    run_demo,
+)
 
 
 def build_debug_state(user_text: str = DEFAULT_PROMPT) -> dict[str, object]:
     step1_user_text = user_text.strip() or DEFAULT_PROMPT
 
-    step2_call = mock_model_function_call(step1_user_text)
+    step2_call = request_model_function_call(step1_user_text)
+
     step3_call_id = str(step2_call["call_id"])
     step3_arguments_text = str(step2_call["arguments"])
+
     step3_arguments_obj: dict[str, object] | None
     try:
         parsed_args = json.loads(step3_arguments_text)
@@ -26,19 +33,14 @@ def build_debug_state(user_text: str = DEFAULT_PROMPT) -> dict[str, object]:
         step3_arguments_obj = None
 
     step4_positions_obj = step3_arguments_obj.get("positions") if isinstance(step3_arguments_obj, dict) else None
-    if isinstance(step4_positions_obj, list):
-        step4_positions = step4_positions_obj
-    else:
-        step4_positions = []
+    step4_positions = step4_positions_obj if isinstance(step4_positions_obj, list) else []
 
-    step5_local_result: dict[str, object] | None = None
-    step5_local_error: str | None = None
+    step5_local_result: dict[str, object]
     try:
         local_result = calc_portfolio_value(step4_positions)
         step5_local_result = {"status": "ok", "result": local_result}
     except Exception as exc:  # noqa: BLE001
-        step5_local_error = str(exc)
-        step5_local_result = {"status": "error", "error": step5_local_error}
+        step5_local_result = {"status": "error", "error": str(exc)}
 
     step6_demo_result = run_demo(step1_user_text)
 
@@ -50,7 +52,6 @@ def build_debug_state(user_text: str = DEFAULT_PROMPT) -> dict[str, object]:
         "step3_arguments_obj": step3_arguments_obj,
         "step4_positions": step4_positions,
         "step5_local_result": step5_local_result,
-        "step5_local_error": step5_local_error,
         "demo_result": step6_demo_result,
     }
     return debug_state
@@ -75,7 +76,7 @@ def _print_demo_result(demo_result: dict[str, Any]) -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="function_call debug main：用于 F5 逐行观察中间变量")
+    parser = argparse.ArgumentParser(description="function_call debug main: F5 逐行观察在线 function call 流程")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="调试输入文本")
     parser.add_argument("--print-trace", choices=("y", "n"), default="y", help="是否打印 trace")
     return parser.parse_args()

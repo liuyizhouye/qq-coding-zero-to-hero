@@ -1,18 +1,12 @@
 import argparse
 import json
-import re
+import os
 from typing import TypedDict
 from uuid import uuid4
 
-# 本模块是一个“function_call 教学最小闭环”：
-# 1) 从用户文本提取参数
-# 2) 生成模拟的 function_call 请求
-# 3) 执行本地函数
-# 4) 回填 function_call_output（携带同一个 call_id）
-# 5) 生成最终答案并输出 trace
+from openai import OpenAI
+
 DEFAULT_PROMPT = "请计算组合总市值: AAPL 10@180.5, TSLA -3@210, SPY 2@500。请先调用工具再回答。"
-# 语法约定：SYMBOL qty@price，例如 AAPL 10@180.5
-POSITION_PATTERN = re.compile(r"([A-Za-z][A-Za-z0-9._-]*)\s*(-?\d+(?:\.\d+)?)@(-?\d+(?:\.\d+)?)")
 TraceEvent = dict[str, object]
 
 
@@ -21,12 +15,44 @@ class DemoResult(TypedDict):
     trace: list[TraceEvent]
 
 
-def calc_portfolio_value(positions: list[dict[str, float | str]]) -> dict[str, float]:
-    """根据持仓列表计算组合总市值。
+def _get_client() -> OpenAI:
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("missing DEEPSEEK_API_KEY; online mode requires a valid API key")
+    return OpenAI(api_key=api_key, base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
 
-    计算公式：sum(qty * price)。
-    同时在这里做基础参数校验，把错误尽早暴露给调用方。
-    """
+
+def _get_model() -> str:
+    return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+
+def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
+    client = _get_client()
+    response = client.chat.completions.create(
+        model=_get_model(),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        stream=False,
+    )
+
+    message = response.choices[0].message.content
+    if not isinstance(message, str):
+        raise ValueError("model did not return text content")
+
+    try:
+        payload = json.loads(message)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"model output is not strict JSON: {message}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("model JSON output must be an object")
+    return payload
+
+
+def calc_portfolio_value(positions: list[dict[str, float | str]]) -> dict[str, float]:
+    """根据持仓列表计算组合总市值。"""
     if not positions:
         raise ValueError("positions must contain at least one item")
 
@@ -44,35 +70,85 @@ def calc_portfolio_value(positions: list[dict[str, float | str]]) -> dict[str, f
     return {"total_value": total}
 
 
-def _extract_positions(user_text: str) -> list[dict[str, float | str]]:
-    """从自然语言里提取持仓，转换为结构化参数。"""
-    matches = POSITION_PATTERN.findall(user_text)
-    return [
-        {"symbol": symbol.upper(), "qty": float(qty_text), "price": float(price_text)}
-        for symbol, qty_text, price_text in matches
-    ]
+def request_model_function_call(user_text: str) -> dict[str, object]:
+    system_prompt = (
+        "You convert a Chinese finance request into a function call argument object. "
+        "Return strict JSON only, no markdown."
+    )
+    user_prompt = (
+        "目标函数: calc_portfolio_value\n"
+        "请从用户输入中抽取 positions。\n"
+        "JSON schema:\n"
+        "{\n"
+        '  "name": "calc_portfolio_value",\n'
+        '  "arguments": {\n'
+        '    "positions": [\n'
+        '      {"symbol": "AAPL", "qty": 10, "price": 180.5}\n'
+        "    ]\n"
+        "  }\n"
+        "}\n"
+        "规则: symbol 用字符串；qty/price 用数字；若无法解析则返回空数组。\n"
+        f"用户输入: {user_text}"
+    )
 
+    payload = _request_json(system_prompt, user_prompt)
+    name = str(payload.get("name", ""))
+    if name != "calc_portfolio_value":
+        raise ValueError("model returned invalid function name")
 
-def mock_model_function_call(user_text: str) -> dict[str, object]:
-    """模拟模型侧的 function_call 事件。
+    arguments_obj = payload.get("arguments")
+    if not isinstance(arguments_obj, dict):
+        raise ValueError("model returned invalid arguments object")
 
-    注意这里的 arguments 必须是 JSON 字符串，贴近真实 API 返回形态。
-    """
-    arguments = {"positions": _extract_positions(user_text)}
+    positions_obj = arguments_obj.get("positions")
+    if not isinstance(positions_obj, list):
+        raise ValueError("model returned invalid arguments.positions")
+
+    normalized_positions: list[dict[str, float | str]] = []
+    for index, item in enumerate(positions_obj, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"model returned non-object position at index {index}")
+        try:
+            symbol = str(item["symbol"]).upper().strip()
+            qty = float(item["qty"])
+            price = float(item["price"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"model returned invalid position at index {index}") from exc
+        normalized_positions.append({"symbol": symbol, "qty": qty, "price": price})
+
+    call_id = f"call_{uuid4().hex[:10]}"
     return {
         "type": "function_call",
         "name": "calc_portfolio_value",
-        "call_id": f"call_{uuid4().hex[:10]}",
-        "arguments": json.dumps(arguments, ensure_ascii=False),
+        "call_id": call_id,
+        "arguments": json.dumps({"positions": normalized_positions}, ensure_ascii=False),
     }
 
 
+def request_model_final_answer(user_text: str, tool_output: dict[str, object], call_id: str) -> str:
+    system_prompt = "You summarize tool execution results for end users. Return strict JSON only."
+    user_prompt = (
+        "请根据以下信息给出中文最终回答。\n"
+        "JSON schema:\n"
+        "{\n"
+        '  "final_answer": "string"\n'
+        "}\n"
+        f"用户输入: {user_text}\n"
+        f"call_id: {call_id}\n"
+        f"工具输出(JSON): {json.dumps(tool_output, ensure_ascii=False)}"
+    )
+
+    payload = _request_json(system_prompt, user_prompt)
+    final_answer = payload.get("final_answer")
+    if not isinstance(final_answer, str) or not final_answer.strip():
+        raise ValueError("model returned invalid final_answer")
+    return final_answer.strip()
+
+
 def run_demo(user_text: str) -> DemoResult:
-    """执行完整演示流程并返回可观察的 trace。"""
     trace: list[TraceEvent] = []
 
-    # Step 1: 模拟模型先发起函数调用请求
-    call = mock_model_function_call(user_text)
+    call = request_model_function_call(user_text)
     call_id = str(call["call_id"])
     arguments_text = str(call["arguments"])
     trace.append(
@@ -87,7 +163,6 @@ def run_demo(user_text: str) -> DemoResult:
 
     output_payload: dict[str, object]
     try:
-        # Step 2: arguments 是字符串，先反序列化再做结构校验
         parsed = json.loads(arguments_text)
         if not isinstance(parsed, dict):
             raise ValueError("arguments must be a JSON object")
@@ -95,17 +170,14 @@ def run_demo(user_text: str) -> DemoResult:
         if not isinstance(positions, list):
             raise ValueError("arguments.positions must be a list")
 
-        # Step 3: 调用本地业务函数（真正执行在这里）
         result = calc_portfolio_value(positions)
         trace.append({"event": "local_function_result", "status": "ok", "result": result})
-        # 统一封装成 result/error 二选一结构，便于后续分支处理
         output_payload = {"result": result}
     except Exception as exc:  # noqa: BLE001
         error_text = str(exc)
         trace.append({"event": "local_function_result", "status": "error", "error": error_text})
         output_payload = {"error": error_text}
 
-    # Step 4: 把本地执行结果包装成 function_call_output，且绑定同一个 call_id
     output_text = json.dumps(output_payload, ensure_ascii=False)
     trace.append(
         {
@@ -116,21 +188,13 @@ def run_demo(user_text: str) -> DemoResult:
         }
     )
 
-    # Step 5: 基于工具结果生成最终自然语言回答
-    if "error" in output_payload:
-        final_answer = f"工具调用已完成，但输入存在问题：{output_payload['error']}"
-    else:
-        result_block = output_payload["result"]
-        assert isinstance(result_block, dict)
-        total_value = float(result_block["total_value"])
-        final_answer = f"组合总市值为 {total_value:.2f}。"
-
+    final_answer = request_model_final_answer(user_text=user_text, tool_output=output_payload, call_id=call_id)
     trace.append({"event": "model_final_answer", "content": final_answer})
     return {"final_answer": final_answer, "trace": trace}
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="离线演示 function_call -> 本地函数执行 -> function_call_output")
+    parser = argparse.ArgumentParser(description="在线演示 function_call -> 本地函数执行 -> function_call_output")
     parser.add_argument("prompt", nargs="*", help="可选：覆盖默认用户输入")
     return parser.parse_args()
 
@@ -140,7 +204,6 @@ def _main() -> None:
     user_text = " ".join(args.prompt).strip() or DEFAULT_PROMPT
     result = run_demo(user_text)
 
-    # 教学场景下优先打印完整 trace，方便看到每一步输入输出。
     print("=== TRACE ===")
     for index, event in enumerate(result["trace"], start=1):
         print(f"[{index}]")

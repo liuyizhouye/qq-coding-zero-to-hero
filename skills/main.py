@@ -9,35 +9,35 @@ import argparse
 import json
 from typing import Any
 
-from skills.component import (
-    DEFAULT_PROMPT,
-    build_execution_plan,
-    load_skill_catalog,
-    match_skill_scores,
-    run_demo,
-    select_skill,
-)
+from skills.component import DEFAULT_PROMPT, load_skill_catalog, request_skill_routing, run_demo
 
 
 def build_debug_state(user_text: str = DEFAULT_PROMPT) -> dict[str, object]:
     step1_user_text = user_text.strip() or DEFAULT_PROMPT
 
     step2_catalog = load_skill_catalog()
-    step3_scores = match_skill_scores(step1_user_text, step2_catalog)
-    step4_selection = select_skill(step1_user_text, step2_catalog)
+    step3_routing = request_skill_routing(step1_user_text, step2_catalog)
 
-    step5_plan: list[str] | None
-    if step4_selection is not None:
-        step5_plan = build_execution_plan(step4_selection)
+    step4_selection: dict[str, object] | None
+    selected_name = step3_routing.get("selected_name")
+    matched = bool(step3_routing.get("matched", False))
+    if matched and isinstance(selected_name, str) and selected_name:
+        step4_selection = {
+            "name": selected_name,
+            "score": int(step3_routing.get("score", 0)),
+            "trigger_hits": list(step3_routing.get("trigger_hits", [])),
+        }
     else:
-        step5_plan = None
+        step4_selection = None
+
+    step5_plan = list(step3_routing.get("execution_plan", [])) if isinstance(step3_routing.get("execution_plan"), list) else []
 
     step6_demo_result = run_demo(step1_user_text)
 
     debug_state: dict[str, object] = {
         "step1_user_text": step1_user_text,
         "step2_catalog": step2_catalog,
-        "step3_scores": step3_scores,
+        "step3_routing": step3_routing,
         "step4_selection": step4_selection,
         "step5_plan": step5_plan,
         "demo_result": step6_demo_result,
@@ -64,7 +64,7 @@ def _print_demo_result(demo_result: dict[str, Any]) -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="skills debug main：用于 F5 逐行观察匹配与规划")
+    parser = argparse.ArgumentParser(description="skills debug main: F5 逐行观察在线 skill 路由")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="调试输入文本")
     parser.add_argument("--print-trace", choices=("y", "n"), default="y", help="是否打印 trace")
     return parser.parse_args()

@@ -1,111 +1,64 @@
 # mcp 模块
 
-本模块聚焦 MCP 审批流（approval flow）机制，而不是远程工具本身。
+这个模块演示在线 MCP 审批流：
 
-核心流程：
-
-1. 模型发出 `mcp_approval_request`
+1. LLM 生成 `mcp_approval_request`
 2. 操作员给出 `mcp_approval_response`
-3. 系统根据批准/拒绝走不同分支
+3. `approve=True/False` 进入不同分支
+4. LLM 产出最终总结
 
-## 这个模块解决什么问题
+## 核心概念
 
-MCP 让模型可调用外部能力，但外部调用可能涉及权限、成本、数据安全。审批流的价值是把“是否允许调用”交给操作员显式决策。
+- `mcp_approval_request`: 模型请求调用外部能力。
+- `approval_request_id`: 请求与审批响应的关联键。
+- `mcp_approval_response`: 明确的策略决策（批准/拒绝）。
 
-## 概念背后的原理
+## 在线前置条件
 
-### `mcp_approval_request`
+```env
+DEEPSEEK_API_KEY=your_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
 
-它表示模型在请求执行某个远端工具动作。该事件应包含足够上下文（工具名、参数、server label）供人判断风险。
+无 key / 网络异常 / 非 JSON 输出都会直接失败。
 
-### `approval_request_id`
+## 代码实现映射
 
-审批流的关联键。`mcp_approval_response` 必须携带这个 ID，才能保证“这条同意/拒绝意见”绑定到正确请求。
+- `build_mcp_tool_config(...)`: 生成 MCP 工具配置。
+- `request_mcp_approval_request(...)`: 在线生成审批请求对象。
+- `request_mcp_final_answer(...)`: 在线生成最终总结。
+- `run_demo(user_text, approve=True)`: 审批分支主流程。
 
-### `mcp_approval_response`
+## 分支行为
 
-它是一个显式策略决策：
+- `approve=False`: 在 `mcp_approval_response` 后立即终止，不执行工具结果分支。
+- `approve=True`: 继续写入 `mcp_tool_result`，再生成最终回答。
 
-- `approve=True`：允许继续执行
-- `approve=False`：拒绝并终止当前调用链
+## trace 关键事件
 
-## 实现过程（对应代码）
+- `mcp_tool_config`
+- `mcp_approval_request`
+- `mcp_approval_response`
+- `mcp_tool_result`（仅批准分支）
+- `model_final_answer`
 
-### 1) 构造 MCP 工具配置
-
-`build_mcp_tool_config(...)` 负责聚合配置：
-
-- `server_url`
-- `server_label`
-- `require_approval=always`
-- `allowed_tools` 白名单
-
-### 2) 生成审批请求
-
-`mock_mcp_approval_request()` 模拟模型请求审批，输出请求对象和 `approval_request_id`。
-
-### 3) 写入审批响应
-
-`run_demo(user_text, approve=...)` 根据参数生成 `mcp_approval_response`：
-
-- `approve=True` -> reason: approved
-- `approve=False` -> reason: rejected
-
-### 4) 分支执行
-
-- 拒绝分支：立即返回 `model_final_answer`（流程终止）
-- 批准分支：继续生成 `mcp_tool_result` 并返回最终答案
-
-## Trace 设计
-
-默认会包含这些关键事件：
-
-1. `mcp_tool_config`
-2. `mcp_approval_request`
-3. `mcp_approval_response`
-4. `mcp_tool_result`（仅批准时存在）
-5. `model_final_answer`
-
-这个事件模型能直接映射真实审批系统的审计日志结构。
-
-## 如何运行
-
-批准分支：
+## 运行
 
 ```bash
 python mcp/component.py --approve y
-```
-
-拒绝分支：
-
-```bash
 python mcp/component.py --approve n
+python mcp/component.py --approve y "请解释 MCP 审批机制"
 ```
 
-自定义问题：
+## 常见错误
 
-```bash
-python mcp/component.py --approve y "MCP 在工具调用里解决了什么问题？"
-```
+- `missing DEEPSEEK_API_KEY`
+- `model output is not strict JSON`
+- 401/429/超时等 API 调用异常
 
-## Notebook 学习重点
+## 扩展方向
 
-`walkthrough.ipynb` 重点看三件事：
-
-1. `approval_request_id` 在请求/响应中的一致性。
-2. 批准与拒绝分支的事件差异。
-3. 为什么审批事件应先于工具执行事件。
-
-## 常见误区
-
-- 误区：批准只是 UI 行为，不影响流程。
-  - 实际：批准是流程控制信号，决定是否允许进入后续执行。
-
-- 误区：拒绝后还能继续执行同一请求。
-  - 实际：拒绝分支应立即终止该调用链。
-
-## 可扩展方向
-
-1. 接入真实风险策略（按工具类别、参数范围自动建议 approve/reject）。
-2. 审批结果持久化（数据库审计日志）。
-3. 增加多级审批（operator -> admin）。
+- 把 `approve` 决策改为策略引擎 + 人工复核。
+- 记录审批日志到数据库。
+- 增加多级审批链路。
