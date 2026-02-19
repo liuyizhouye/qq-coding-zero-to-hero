@@ -137,6 +137,27 @@ python -m pytest -q
 python scripts/notebook_guard.py
 ```
 
+## VS Code F5 Debug
+
+1. 安装并启用 VS Code Python 扩展（ms-python.python）。
+2. 打开 Run and Debug 面板，选择对应配置后按 F5。
+3. 推荐先从 `Debug function_call (step)`、`Debug mcp (approve=n)`、`Debug rag (custom query)` 开始。
+
+调试配置文件：
+
+- `.vscode/launch.json`：模块级 F5 入口（含关键分支参数）。
+- `.vscode/settings.json`：固定解释器为 `/Users/liuyizhou/.venvs/vscode-py312/bin/python`。
+
+推荐断点位置：
+
+- 每个模块 `main.py` 的 `build_debug_state(...)` 内 `step1_* / step2_* / step3_*` 赋值行。
+
+查看变量方式：
+
+- Variables 面板看局部变量。
+- Watch 添加 `debug_state`、`demo_result`、`trace`。
+- Debug Console 查看表达式与对象结构。
+
 ## 目录结构（关键部分）
 
 ```text

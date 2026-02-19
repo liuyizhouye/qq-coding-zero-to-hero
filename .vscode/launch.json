@@ -1,0 +1,171 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug function_call (step)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/function_call/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--prompt",
+        "${input:functionCallPrompt}",
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug mcp (approve=y)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/mcp/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--approve",
+        "y",
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug mcp (approve=n)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/mcp/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--approve",
+        "n",
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug skills (step)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/skills/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--prompt",
+        "${input:skillsPrompt}",
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug decorator (step)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/decorator/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug web_data_flow (demo step)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/web_data_flow/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--mode",
+        "demo",
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug react_architecture (step)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/react_architecture/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug rag (default)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/rag/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
+      "name": "Debug rag (custom query)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/rag/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--query",
+        "${input:ragQuery}",
+        "--top-k",
+        "${input:ragTopK}",
+        "--print-trace",
+        "y"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "functionCallPrompt",
+      "type": "promptString",
+      "description": "function_call 调试输入",
+      "default": "请计算组合总市值: AAPL 10@180.5, TSLA -3@210, SPY 2@500。请先调用工具再回答。"
+    },
+    {
+      "id": "skillsPrompt",
+      "type": "promptString",
+      "description": "skills 调试输入",
+      "default": "请帮我创建一个新技能，用于规范化代码评审流程。"
+    },
+    {
+      "id": "ragQuery",
+      "type": "promptString",
+      "description": "rag 自定义 query",
+      "default": "RAG-Sequence 和 RAG-Token 有什么区别？"
+    },
+    {
+      "id": "ragTopK",
+      "type": "promptString",
+      "description": "rag top-k",
+      "default": "3"
+    }
+  ]
+}
