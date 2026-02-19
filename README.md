@@ -1,8 +1,10 @@
 # qq-coding-zero-to-hero
 
-Python 学习项目：function_call + MCP（离线模块化）
+Python 学习项目：function_call + MCP + skills + nanoGPT（模块化）
 
-这是一个按“知识点模块”组织的学习项目。每个模块都包含：
+这是一个按“知识点模块”组织的学习项目。
+
+自建教学模块（`function_call`、`mcp`、`skills`）包含：
 
 1. 中文讲解与案例 `README.md`
 2. 可独立运行的 Python 组件 `component.py`
@@ -12,6 +14,8 @@ Python 学习项目：function_call + MCP（离线模块化）
 
 - `function_call/`
 - `mcp/`
+- `skills/`
+- `nanoGPT/`（引入自 https://github.com/karpathy/nanoGPT）
 
 ## 目录结构
 
@@ -25,9 +29,19 @@ qq-coding-zero-to-hero/
     README.md
     component.py
     walkthrough.ipynb
+  skills/
+    README.md
+    component.py
+    walkthrough.ipynb
+  nanoGPT/
+    README.md
+    train.py
+    model.py
+    ...（保持上游仓库结构）
   tests/
     test_function_call_component.py
     test_mcp_component.py
+    test_skills_component.py
   scripts/
     notebook_guard.py
   .githooks/
@@ -79,6 +93,20 @@ python mcp/component.py --approve y
 python mcp/component.py --approve n
 ```
 
+`skills`：
+
+```bash
+python skills/component.py
+```
+
+`nanoGPT`：
+
+```bash
+cd nanoGPT
+# 按上游说明准备数据、安装依赖并运行
+# 详见 nanoGPT/README.md
+```
+
 ## 打开 Notebook
 
 ```bash
@@ -89,6 +117,7 @@ python -m jupyter lab
 
 - `function_call/walkthrough.ipynb`
 - `mcp/walkthrough.ipynb`
+- `skills/walkthrough.ipynb`
 
 ## 运行测试
 

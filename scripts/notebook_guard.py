@@ -7,6 +7,7 @@ KERNEL_DISPLAY_NAME = "Python (qq-coding-zero-to-hero)"
 NOTEBOOKS = [
     Path("function_call/walkthrough.ipynb"),
     Path("mcp/walkthrough.ipynb"),
+    Path("skills/walkthrough.ipynb"),
 ]
 
 
