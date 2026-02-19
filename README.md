@@ -28,6 +28,10 @@ qq-coding-zero-to-hero/
   tests/
     test_function_call_component.py
     test_mcp_component.py
+  scripts/
+    notebook_guard.py
+  .githooks/
+    pre-commit
   README.md
   requirements.txt
   pyrightconfig.json
@@ -42,6 +46,18 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+## 一次性 Notebook 配置
+
+```bash
+python -m ipykernel install --user --name qq-coding-zero-to-hero --display-name "Python (qq-coding-zero-to-hero)"
+git config core.hooksPath .githooks
+```
+
+说明：
+
+- notebook 默认 kernel 已固定为 `Python (qq-coding-zero-to-hero)`。
+- 提交时会自动执行 `scripts/notebook_guard.py`，清理 `outputs/execution_count`，减少无意义 git 变更。
 
 ## 运行模块
 
