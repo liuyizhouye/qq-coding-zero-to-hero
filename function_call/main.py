@@ -1,10 +1,3 @@
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 import argparse
 import json
 from typing import Any
@@ -39,7 +32,7 @@ def build_debug_state(user_text: str = DEFAULT_PROMPT) -> dict[str, object]:
     try:
         local_result = calc_portfolio_value(step4_positions)
         step5_local_result = {"status": "ok", "result": local_result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         step5_local_result = {"status": "error", "error": str(exc)}
 
     step6_demo_result = run_demo(step1_user_text)

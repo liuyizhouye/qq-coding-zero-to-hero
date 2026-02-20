@@ -217,7 +217,7 @@ def run_demo(user_text: str) -> DemoResult:
         result = calc_portfolio_value(positions)
         trace.append({"event": "local_function_result", "status": "ok", "result": result})
         output_payload = {"result": result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error_text = str(exc)
         trace.append({"event": "local_function_result", "status": "error", "error": error_text})
         output_payload = {"error": error_text}
