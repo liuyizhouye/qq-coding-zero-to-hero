@@ -87,6 +87,14 @@ python -m jupyter lab
 - `web_data_flow/walkthrough.ipynb`
 - `react_architecture/walkthrough.ipynb`
 
+### 细讲版 walkthrough 标准
+
+- 每个教学 notebook 必须按固定顺序组织：`目标与先修` -> `流程总览` -> `环境与依赖检查` -> `步骤拆解（逐步）` -> `端到端结果` -> `常见错误` -> `总结`。
+- 每个代码单元前必须有 markdown 讲解，且必须包含：`本步做什么`、`为什么这样做`、`输入`、`输出`、`观察点`。
+- 每个代码单元必须展示中间过程（变量、结构化对象或 trace）；禁止只调用函数不展示结果。
+- 在线模块（`function_call/openai_api/mcp/skills/rag`）缺少 `DEEPSEEK_API_KEY` 时必须显式失败，不做静默跳过。
+- 建议学习顺序：`decorator` -> `web_data_flow` -> `react_architecture` -> `function_call` -> `openai_api` -> `mcp` -> `skills` -> `rag`。
+
 ## 测试
 
 默认执行本地测试（在线测试自动跳过）：

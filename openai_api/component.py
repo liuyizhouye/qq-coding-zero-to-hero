@@ -5,9 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from typing import Required, TypedDict, get_origin
-
-from typing_extensions import Required as RequiredExt
+from typing import Required, TypedDict, get_origin, get_type_hints
 
 from openai import APIConnectionError, APITimeoutError, OpenAI
 from openai.types.chat.completion_create_params import CompletionCreateParamsBase
@@ -68,14 +66,14 @@ def _extract_required_param_names(typed_dict_cls: type[object]) -> list[str]:
     if isinstance(required_keys, (set, frozenset)) and required_keys:
         return sorted(str(name) for name in required_keys)
 
-    annotations = getattr(typed_dict_cls, "__annotations__", {})
-    if not isinstance(annotations, dict):
+    try:
+        hints = get_type_hints(typed_dict_cls, include_extras=True)
+    except (NameError, TypeError, AttributeError):
         return []
 
     fallback_required: list[str] = []
-    for name, annotation in annotations.items():
-        origin = get_origin(annotation)
-        if origin in {Required, RequiredExt}:
+    for name, annotation in hints.items():
+        if get_origin(annotation) is Required:
             fallback_required.append(str(name))
     return sorted(fallback_required)
 

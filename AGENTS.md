@@ -79,6 +79,22 @@
 - 正确命令示例：`python -m function_call.main --print-trace n`（在已配置环境变量前提下）。
 - 反例关键词（禁止）：`离线兜底自动成功`、`把真实 key 写进 .env 并提交`。
 
+## Notebook Teaching Depth Rules
+- 教学 notebook（`*/walkthrough.ipynb`）必须使用细讲结构，章节顺序必须固定为：
+  - `目标与先修`
+  - `流程总览`
+  - `环境与依赖检查`
+  - `步骤拆解（逐步）`
+  - `端到端结果`
+  - `常见错误`
+  - `总结`
+- 每个代码单元前必须有 markdown 讲解单元，且必须包含 5 项字段：`本步做什么`、`为什么这样做`、`输入`、`输出`、`观察点`。
+- 每个 notebook 开头必须包含统一 helper 代码单元（至少提供 `show_json`），用于稳定展示中间过程。
+- 代码单元必须显式展示中间结果；禁止只调用函数不展示输出。
+- 在线模块 notebook（`function_call/openai_api/mcp/skills/rag`）必须包含独立环境检查单元：缺少 `DEEPSEEK_API_KEY` 时必须显式 `raise RuntimeError(...)`。
+- notebook 必须支持顺序 `Run All`；禁止依赖手动跳单元初始化的隐式状态。
+- 反例关键词（禁止）：`只有 1 个 markdown`、`直接贴最终答案不展示中间变量`、`缺 key 自动静默跳过`。
+
 ## Change Checklist
 - 每次改动运行入口、调试配置、类型检查配置后，必须逐项自检：
   - [ ] `pyrightconfig.json` 仍是类型检查主配置源。
@@ -86,6 +102,7 @@
   - [ ] `.vscode/launch.json` 对教学模块仍使用 `module` 启动。
   - [ ] `main.py` 无 `sys.path` 注入、无导入区 `try/except` 兜底。
   - [ ] 无无效 `# noqa`（尤其 `RUF100`）。
+  - [ ] 教学 notebook 无“代码前缺讲解 markdown”与“中间结果不可观测”问题。
   - [ ] 至少执行 1 条运行命令与 1 条检查命令。
 - 最小验证命令集合（每次改配置后至少执行）：
   - `python -m decorator.main --print-trace n`
