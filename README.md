@@ -5,6 +5,7 @@
 ## 模块总览
 
 - `function_call/`: 在线 function calling 闭环（模型函数调用 -> 本地函数 -> 回填 -> 最终回答）。
+- `openai_api/`: OpenAI API 功能与参数教学（DeepSeek OpenAI 兼容实调）。
 - `mcp/`: 在线 MCP 审批流（`mcp_approval_request` / `mcp_approval_response` / 分支处理）。
 - `skills/`: 在线 skill 路由（catalog -> LLM 路由 JSON -> 计划）。
 - `rag/`: 本地检索 + 在线生成（报告切分/Top-k 检索 + LLM 引用式回答）。
@@ -18,6 +19,7 @@
 以下模块只支持在线 API，不再提供离线仿真：
 
 - `function_call`
+- `openai_api`
 - `mcp`
 - `skills`
 - `rag`
@@ -57,6 +59,7 @@ git config core.hooksPath .githooks
 
 ```bash
 python function_call/component.py
+python openai_api/component.py
 python mcp/component.py --approve y
 python mcp/component.py --approve n
 python skills/component.py
@@ -76,6 +79,7 @@ python -m jupyter lab
 ```
 
 - `function_call/walkthrough.ipynb`
+- `openai_api/walkthrough.ipynb`
 - `mcp/walkthrough.ipynb`
 - `skills/walkthrough.ipynb`
 - `rag/walkthrough.ipynb`

@@ -6,6 +6,7 @@ KERNEL_NAME = "qq-coding-zero-to-hero"
 KERNEL_DISPLAY_NAME = "Python (qq-coding-zero-to-hero)"
 NOTEBOOKS = [
     Path("function_call/walkthrough.ipynb"),
+    Path("openai_api/walkthrough.ipynb"),
     Path("mcp/walkthrough.ipynb"),
     Path("skills/walkthrough.ipynb"),
     Path("decorator/walkthrough.ipynb"),

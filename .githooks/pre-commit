@@ -21,6 +21,7 @@ fi
 
 git add \
   function_call/walkthrough.ipynb \
+  openai_api/walkthrough.ipynb \
   mcp/walkthrough.ipynb \
   skills/walkthrough.ipynb \
   decorator/walkthrough.ipynb \

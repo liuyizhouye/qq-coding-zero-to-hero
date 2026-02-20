@@ -8,6 +8,7 @@
 
 ## Repo Snapshot
 - `function_call/`：在线 function calling 闭环（模型函数调用 -> 本地函数 -> 回填 -> 最终回答）。
+- `openai_api/`：OpenAI API 功能与参数教学（DeepSeek OpenAI 兼容实调）。
 - `mcp/`：在线 MCP 审批流（`mcp_approval_request` / `mcp_approval_response` / 分支处理）。
 - `skills/`：在线 skill 路由（catalog -> LLM 路由 JSON -> 执行计划）。
 - `rag/`：本地检索 + 在线生成（切分/Top-k 检索 + LLM 回答）。
@@ -31,6 +32,7 @@
 - 调试入口必须统一使用模块启动：`python -m <package>.main`。
 - 正确调试命令示例：
   - `python -m function_call.main --print-trace n`
+  - `python -m openai_api.main --print-trace n`
   - `python -m mcp.main --approve y --print-trace n`
   - `python -m skills.main --print-trace n`
   - `python -m decorator.main --print-trace n`
@@ -68,7 +70,7 @@
 - 反例关键词（禁止）：`Unused noqa directive`、`# noqa: BLE001`（在未启用 BLE 规则时）。
 
 ## LLM Modules Runtime Contract
-- 在线模块（`function_call`、`mcp`、`skills`、`rag`）必须依赖以下环境变量：
+- 在线模块（`function_call`、`openai_api`、`mcp`、`skills`、`rag`）必须依赖以下环境变量：
   - `DEEPSEEK_API_KEY`
   - `DEEPSEEK_BASE_URL`
   - `DEEPSEEK_MODEL`
@@ -123,4 +125,4 @@
 - `python -m decorator.main --print-trace n`
 - `npx -y pyright function_call/main.py`
 - `uvx ruff check function_call/main.py`
-- `rg -n "sys\.path\.insert\(|PROJECT_ROOT = Path\(__file__\)\.resolve\(\)\.parents\[1\]|python\.analysis\.extraPaths|# noqa: BLE001" function_call mcp skills decorator web_data_flow react_architecture rag .vscode pyrightconfig.json`
+- `rg -n "sys\.path\.insert\(|PROJECT_ROOT = Path\(__file__\)\.resolve\(\)\.parents\[1\]|python\.analysis\.extraPaths|# noqa: BLE001" function_call openai_api mcp skills decorator web_data_flow react_architecture rag .vscode pyrightconfig.json`

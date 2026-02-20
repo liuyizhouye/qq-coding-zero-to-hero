@@ -18,6 +18,22 @@
       ]
     },
     {
+      "name": "Debug openai_api (step)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "openai_api.main",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "stopOnEntry": true,
+      "args": [
+        "--prompt",
+        "${input:openaiApiPrompt}",
+        "--print-trace",
+        "y"
+      ]
+    },
+    {
       "name": "Debug mcp (approve=y)",
       "type": "debugpy",
       "request": "launch",
@@ -148,6 +164,12 @@
       "type": "promptString",
       "description": "function_call 调试输入",
       "default": "请计算组合总市值: AAPL 10@180.5, TSLA -3@210, SPY 2@500。请先调用工具再回答。"
+    },
+    {
+      "id": "openaiApiPrompt",
+      "type": "promptString",
+      "description": "openai_api 调试输入",
+      "default": "请用简短中文说明 LLM API 常见能力与参数作用。"
     },
     {
       "id": "skillsPrompt",

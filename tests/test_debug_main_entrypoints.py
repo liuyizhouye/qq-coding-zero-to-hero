@@ -4,6 +4,7 @@ import pytest
 
 ALL_MODULES = [
     "function_call.main",
+    "openai_api.main",
     "mcp.main",
     "skills.main",
     "decorator.main",
@@ -14,6 +15,7 @@ ALL_MODULES = [
 
 ONLINE_MODULES = [
     "function_call.main",
+    "openai_api.main",
     "mcp.main",
     "skills.main",
     "rag.main",
