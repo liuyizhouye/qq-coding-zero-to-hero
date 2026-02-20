@@ -1,3 +1,12 @@
+"""function_call 教学模块（在线模式）。
+
+这个文件演示一个最小闭环：
+1) 让模型返回结构化 function_call
+2) 本地执行业务函数
+3) 回填 function_call_output
+4) 再让模型生成最终答案
+"""
+
 import argparse
 import json
 import os
@@ -11,11 +20,18 @@ TraceEvent = dict[str, object]
 
 
 class DemoResult(TypedDict):
+    """教学模块统一返回结构。"""
+
     final_answer: str
     trace: list[TraceEvent]
 
 
 def _get_client() -> OpenAI:
+    """创建 DeepSeek(OpenAI 兼容) 客户端。
+
+    这里强制要求 `DEEPSEEK_API_KEY`，缺失时直接失败，不做离线兜底。
+    """
+
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         raise RuntimeError("missing DEEPSEEK_API_KEY; online mode requires a valid API key")
@@ -23,10 +39,17 @@ def _get_client() -> OpenAI:
 
 
 def _get_model() -> str:
+    """读取模型名，默认使用 deepseek-chat。"""
+
     return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
 
 def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
+    """向模型发起请求，并严格解析 JSON 对象。
+
+    教学目的：让流程可预测，因此这里不接受 markdown 或自然语言格式回包。
+    """
+
     client = _get_client()
     response = client.chat.completions.create(
         model=_get_model(),
@@ -52,7 +75,11 @@ def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
 
 
 def calc_portfolio_value(positions: list[dict[str, float | str]]) -> dict[str, float]:
-    """根据持仓列表计算组合总市值。"""
+    """根据持仓计算总市值。
+
+    计算公式: sum(qty * price)
+    """
+
     if not positions:
         raise ValueError("positions must contain at least one item")
 
@@ -71,6 +98,12 @@ def calc_portfolio_value(positions: list[dict[str, float | str]]) -> dict[str, f
 
 
 def request_model_function_call(user_text: str) -> dict[str, object]:
+    """请求模型生成 function_call 事件。
+
+    返回结构会被标准化成:
+    {type, name, call_id, arguments(JSON字符串)}
+    """
+
     system_prompt = (
         "You convert a Chinese finance request into a function call argument object. "
         "Return strict JSON only, no markdown."
@@ -104,6 +137,7 @@ def request_model_function_call(user_text: str) -> dict[str, object]:
     if not isinstance(positions_obj, list):
         raise ValueError("model returned invalid arguments.positions")
 
+    # 将模型返回做一层本地规范化，避免后续执行函数时出现类型噪声。
     normalized_positions: list[dict[str, float | str]] = []
     for index, item in enumerate(positions_obj, start=1):
         if not isinstance(item, dict):
@@ -126,6 +160,8 @@ def request_model_function_call(user_text: str) -> dict[str, object]:
 
 
 def request_model_final_answer(user_text: str, tool_output: dict[str, object], call_id: str) -> str:
+    """让模型基于工具输出给出最终中文答案。"""
+
     system_prompt = "You summarize tool execution results for end users. Return strict JSON only."
     user_prompt = (
         "请根据以下信息给出中文最终回答。\n"
@@ -146,8 +182,15 @@ def request_model_final_answer(user_text: str, tool_output: dict[str, object], c
 
 
 def run_demo(user_text: str) -> DemoResult:
+    """执行完整教学流程，并输出 trace。
+
+    事件顺序固定：
+    model_function_call -> local_function_result -> function_call_output -> model_final_answer
+    """
+
     trace: list[TraceEvent] = []
 
+    # 1) 先向模型请求 function_call
     call = request_model_function_call(user_text)
     call_id = str(call["call_id"])
     arguments_text = str(call["arguments"])
@@ -161,6 +204,7 @@ def run_demo(user_text: str) -> DemoResult:
         }
     )
 
+    # 2) 执行本地函数，异常也要记录到 trace 而不是直接中断。
     output_payload: dict[str, object]
     try:
         parsed = json.loads(arguments_text)
@@ -178,6 +222,7 @@ def run_demo(user_text: str) -> DemoResult:
         trace.append({"event": "local_function_result", "status": "error", "error": error_text})
         output_payload = {"error": error_text}
 
+    # 3) 构造 function_call_output 回填事件。
     output_text = json.dumps(output_payload, ensure_ascii=False)
     trace.append(
         {
@@ -188,18 +233,23 @@ def run_demo(user_text: str) -> DemoResult:
         }
     )
 
+    # 4) 再让模型根据工具输出生成最终面向用户的回答。
     final_answer = request_model_final_answer(user_text=user_text, tool_output=output_payload, call_id=call_id)
     trace.append({"event": "model_final_answer", "content": final_answer})
     return {"final_answer": final_answer, "trace": trace}
 
 
 def _parse_args() -> argparse.Namespace:
+    """解析命令行参数。"""
+
     parser = argparse.ArgumentParser(description="在线演示 function_call -> 本地函数执行 -> function_call_output")
     parser.add_argument("prompt", nargs="*", help="可选：覆盖默认用户输入")
     return parser.parse_args()
 
 
 def _main() -> None:
+    """CLI 入口：打印完整 trace 与 final answer。"""
+
     args = _parse_args()
     user_text = " ".join(args.prompt).strip() or DEFAULT_PROMPT
     result = run_demo(user_text)

@@ -1,3 +1,8 @@
+"""skills 教学模块（在线模式）。
+
+目标：演示“技能目录 + 模型路由 + 执行计划”这条最小闭环。
+"""
+
 import argparse
 import json
 import os
@@ -10,17 +15,23 @@ TraceEvent = dict[str, object]
 
 
 class SkillDefinition(TypedDict):
+    """技能目录中的单个技能定义。"""
+
     name: str
     description: str
     triggers: list[str]
 
 
 class DemoResult(TypedDict):
+    """教学模块统一返回结构。"""
+
     final_answer: str
     trace: list[TraceEvent]
 
 
 def _get_client() -> OpenAI:
+    """创建在线客户端。"""
+
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         raise RuntimeError("missing DEEPSEEK_API_KEY; online mode requires a valid API key")
@@ -28,10 +39,14 @@ def _get_client() -> OpenAI:
 
 
 def _get_model() -> str:
+    """读取模型名，默认 deepseek-chat。"""
+
     return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
 
 def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
+    """向模型请求严格 JSON。"""
+
     client = _get_client()
     response = client.chat.completions.create(
         model=_get_model(),
@@ -57,6 +72,8 @@ def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
 
 
 def load_skill_catalog() -> list[SkillDefinition]:
+    """返回本地技能目录（catalog）。"""
+
     return [
         {
             "name": "skill-creator",
@@ -72,6 +89,8 @@ def load_skill_catalog() -> list[SkillDefinition]:
 
 
 def request_skill_routing(user_text: str, catalog: list[SkillDefinition]) -> dict[str, object]:
+    """请求模型做技能路由，并返回标准化结果。"""
+
     system_prompt = "You are a skill router. Return strict JSON only, no markdown."
     user_prompt = (
         "请根据用户输入从 catalog 中选择最匹配技能。\n"
@@ -95,6 +114,7 @@ def request_skill_routing(user_text: str, catalog: list[SkillDefinition]) -> dic
     selected_name_obj = payload.get("selected_name")
     selected_name = str(selected_name_obj).strip() if isinstance(selected_name_obj, str) else None
 
+    # 路由结果必须落在 catalog 内，防止模型返回不存在的技能名。
     if matched:
         if not selected_name:
             raise ValueError("model returned matched=true but selected_name is empty")
@@ -122,9 +142,12 @@ def request_skill_routing(user_text: str, catalog: list[SkillDefinition]) -> dic
 
 
 def run_demo(user_text: str) -> DemoResult:
+    """执行技能路由演示流程。"""
+
     trace: list[TraceEvent] = []
     catalog = load_skill_catalog()
 
+    # 1) 记录目录加载事件。
     trace.append(
         {
             "event": "skill_catalog_loaded",
@@ -132,6 +155,7 @@ def run_demo(user_text: str) -> DemoResult:
         }
     )
 
+    # 2) 模型路由。
     routing = request_skill_routing(user_text, catalog)
 
     scores_payload: list[dict[str, object]]
@@ -156,11 +180,13 @@ def run_demo(user_text: str) -> DemoResult:
         }
     )
 
+    # 3) 无匹配：直接给出引导说明。
     if not routing["matched"] or not isinstance(routing["selected_name"], str):
         final_answer = routing["explanation"] or "未匹配到专用 skill。请补充更具体的技能意图。"
         trace.append({"event": "model_final_answer", "content": final_answer})
         return {"final_answer": final_answer, "trace": trace}
 
+    # 4) 有匹配：记录选中技能与执行计划。
     selected_name = routing["selected_name"]
     trace.append(
         {
@@ -185,12 +211,16 @@ def run_demo(user_text: str) -> DemoResult:
 
 
 def _parse_args() -> argparse.Namespace:
+    """解析命令行参数。"""
+
     parser = argparse.ArgumentParser(description="在线演示 skills 模块：发现技能 -> 匹配 -> 规划")
     parser.add_argument("prompt", nargs="*", help="可选：覆盖默认用户输入")
     return parser.parse_args()
 
 
 def _main() -> None:
+    """CLI 入口：打印 trace 与最终答案。"""
+
     args = _parse_args()
     user_text = " ".join(args.prompt).strip() or DEFAULT_PROMPT
     result = run_demo(user_text)
