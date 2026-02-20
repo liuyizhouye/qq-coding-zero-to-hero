@@ -10,7 +10,8 @@ from openai import OpenAI
 
 TraceEvent = dict[str, object]
 DEFAULT_QUERY = "RAG-Sequence 和 RAG-Token 有什么区别？"
-DEFAULT_REPORT_PATH = "RAG-deep-research-report.md"
+MODULE_DIR = Path(__file__).resolve().parent
+DEFAULT_REPORT_PATH = MODULE_DIR / "RAG-deep-research-report.md"
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_\u4e00-\u9fff]+")
 
 
@@ -61,7 +62,7 @@ def _request_json(system_prompt: str, user_prompt: str) -> dict[str, object]:
     return payload
 
 
-def load_report_text(path: str = DEFAULT_REPORT_PATH) -> str:
+def load_report_text(path: str | Path = DEFAULT_REPORT_PATH) -> str:
     report_path = Path(path)
     if not report_path.exists():
         raise FileNotFoundError(f"report file not found: {path}")
@@ -229,7 +230,7 @@ def run_demo(query: str | None = None, top_k: int = 3) -> DemoResult:
     trace.append(
         {
             "event": "report_loaded",
-            "path": DEFAULT_REPORT_PATH,
+            "path": str(DEFAULT_REPORT_PATH),
             "char_count": len(report_text),
         }
     )

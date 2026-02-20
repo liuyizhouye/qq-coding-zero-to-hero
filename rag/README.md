@@ -2,7 +2,7 @@
 
 这个模块演示最小 RAG 闭环（检索本地、生成在线）：
 
-1. 读取 `RAG-deep-research-report.md`
+1. 读取 `rag/RAG-deep-research-report.md`
 2. 切分 chunk（带 overlap）
 3. NumPy 余弦检索 Top-k
 4. 把命中片段交给在线 LLM 生成回答与引用
