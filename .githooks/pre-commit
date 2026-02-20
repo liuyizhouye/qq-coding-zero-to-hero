@@ -1,7 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python scripts/notebook_guard.py
+# Resolve Python interpreter deterministically to avoid running hooks with a
+# random system Python that lacks project dependencies.
+PYTHON_BIN="${PYTHON_BIN:-/Users/liuyizhou/.venvs/vscode-py312/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  if [[ -x ".venv/bin/python" ]]; then
+    PYTHON_BIN=".venv/bin/python"
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python)"
+  else
+    echo "ERROR: no Python interpreter found for pre-commit hook." >&2
+    exit 1
+  fi
+fi
+
+"$PYTHON_BIN" scripts/notebook_guard.py
 
 git add \
   function_call/walkthrough.ipynb \
@@ -11,3 +27,5 @@ git add \
   web_data_flow/walkthrough.ipynb \
   react_architecture/walkthrough.ipynb \
   rag/walkthrough.ipynb
+
+"$PYTHON_BIN" -m pytest -q
